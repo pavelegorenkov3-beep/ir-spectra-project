@@ -25,3 +25,6 @@ benzonitrile,100-47-0,C1=CC=C(C=C1)C#N,True
 benzene,71-43-2,C1=CC=CC=C1,True
 toluene,108-88-3,CC1=CC=CC=C1,True
 phenol,108-95-2,C1=CC=C(C=C1)O,True
+acrylonitrile,107-13-1,C=CC#N,True
+hinoline,91-22-5,,True
+adamantane,281-23-2,C1C2CC3CC1CC(C2)C3,True
