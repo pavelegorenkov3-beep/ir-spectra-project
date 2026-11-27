@@ -1,4 +1,6 @@
+from concurrent.futures import wait
 import time
+from urllib import response
 import requests
 from pathlib import Path
 import pubchempy as pcp
@@ -7,6 +9,17 @@ import re
 from bs4 import BeautifulSoup
 
 NIST_URL = "https://webbook.nist.gov/cgi/cbook.cgi"
+
+def safe_get(params):
+    headers = {"User-Agent": "Mozilla/5.0 (school project)"}
+    for attempt in range(4):
+        try:
+            return requests.get(NIST_URL, params=params, headers=headers, timeout=40)
+        except requests.exceptions.RequestException:
+            pause = 10 * (attempt + 1)
+            print(f"Server don't answer. waiting {pause} seconds.")
+            time.sleep(pause)
+    return None
 
 def download_spectrum(cas: str, output_dir: Path):
     print(f"Скачиваю {cas}...")
@@ -23,7 +36,9 @@ def download_spectrum(cas: str, output_dir: Path):
         "Type": "IR",
     }
 
-    response = requests.get(NIST_URL, params=params, timeout=40)
+    response = safe_get(params)
+    if response is None:
+        return False
 
     if response.status_code != 200 or "##TITLE" not in response.text:
         print(f"Failed to download spectrum for CAS {cas}.")
@@ -46,14 +61,17 @@ def search_cas_by_formula(formula):
         "Units": "SI",
         "cIR": "on", 
     }
-    response = requests.get(NIST_URL, params=params, timeout=40)
+    response = safe_get(params)
+    if response is None:
+        return []
+    
     soup = BeautifulSoup(response.text, "html.parser")
 
     ids = set()
     for link in soup.find_all("a", href=True):
         match = re.search(r"ID=(C\d+)", link["href"])
         if match:
-            ids.add(match.group(1))
+            ids.add(match.group(1))      
     return list(ids)
 
 def id_to_cas(nist_id):
@@ -83,6 +101,24 @@ def generate_formulas(max_c = 10):
                         formulas.append(make_formula(c, h, o, n, s))    
     return formulas
 
+def download_spectra_by_formula(formula, output_dir: Path):
+    seen_ids = set()
+
+    for formula in formula:
+        print(f"Searching for CAS numbers for formula {formula}...")
+        nist_ids = search_cas_by_formula(formula)
+        time.sleep(3)
+
+        for nist_id in sorted(nist_ids):
+            if nist_id in seen_ids:
+                continue
+
+            cas = id_to_cas(nist_id)
+            if download_spectrum(cas, output_dir):
+                seen_ids.add(nist_id)
+
+            time.sleep(1.5)
+
 def main():
     df = pd.read_csv("data/compounds.csv")
     raw_dir = Path("data/raw")
@@ -104,7 +140,7 @@ def main():
     df.to_csv("data/compounds_with_smiles.csv", index=False)
 
 if __name__ == "__main__":
-    #main()
-    f = generate_formulas()
-    print(len(f))
-    print("C2H6O" in f, "C6H14" in f, "C2H4O2" in f)
+    formulas = generate_formulas(max_c = 10)
+    print("All formulas to download:", len(formulas))
+    download_spectra_by_formula(formulas, Path("data/raw"))
+    print("done")
